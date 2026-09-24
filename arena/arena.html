@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Eikos vs Jev — live paper trading</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700;800&display=block" rel="stylesheet">
+<style>
+  :root { --bg:#06070a; --fg:#f3f5f8; --muted:#8b93a3; --dim:#5d6472; --eikos:#f5b942; --eikos2:#ffd98a; --jev:#7aa2ff; --jev2:#b9ccff;
+          --up:#28c07a; --down:#ef4f4f; --flat:#6d7482; --panel1:rgba(22,25,33,.94); --panel2:rgba(11,13,18,.96); }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); }
+  body { font-family:Inter, sans-serif; color:var(--fg); -webkit-font-smoothing:antialiased; }
+  .tight { font-family:"Inter Tight", Inter, sans-serif; } .mono { font-family:"JetBrains Mono", monospace; }
+  #stage { position:absolute; left:0; top:0; width:1920px; height:1080px; transform-origin:0 0; overflow:hidden; }
+  #glowA { position:absolute; left:-520px; top:-460px; width:1500px; height:1100px; border-radius:50%; background:radial-gradient(closest-side, rgba(245,185,66,.14), rgba(245,185,66,0)); }
+  #glowB { position:absolute; right:-560px; top:-420px; width:1500px; height:1100px; border-radius:50%; background:radial-gradient(closest-side, rgba(122,162,255,.12), rgba(122,162,255,0)); }
+  .panel { position:absolute; border-radius:22px; background:linear-gradient(180deg, var(--panel1), var(--panel2));
+           border:1px solid rgba(255,255,255,.08); box-shadow:0 30px 100px rgba(0,0,0,.5); }
+  .lab { font-size:12.5px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
+
+  /* header */
+  #head { position:absolute; left:40px; right:40px; top:26px; height:92px; display:flex; justify-content:space-between; align-items:center; }
+  #vs { display:flex; align-items:baseline; gap:18px; font-size:46px; font-weight:900; letter-spacing:-.035em; }
+  #vs .e { color:var(--eikos); } #vs .j { color:var(--jev); } #vs .v { color:#4a505d; font-size:26px; font-weight:700; letter-spacing:.02em; }
+  #sub { font-size:18px; color:var(--muted); margin-top:6px; }
+  #right { display:flex; align-items:center; gap:14px; }
+  .pill { display:flex; align-items:center; gap:9px; padding:9px 15px; border-radius:999px; font-size:14px; font-weight:800; letter-spacing:.14em;
+          border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.04); white-space:nowrap; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--down); box-shadow:0 0 12px var(--down); animation:pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity:.35; } }
+  #clock { font-size:22px; font-weight:700; letter-spacing:.02em; }
+  #nextbox { width:250px; }
+  #nextlab { display:flex; justify-content:space-between; font-size:13px; font-weight:800; letter-spacing:.14em; color:var(--muted); }
+  #nextlab b { color:var(--fg); font-family:"JetBrains Mono", monospace; letter-spacing:0; font-size:15px; }
+  #nextbar { margin-top:7px; height:5px; border-radius:3px; background:rgba(255,255,255,.07); overflow:hidden; }
+  #nextbar i { display:block; height:100%; width:0; background:linear-gradient(90deg, var(--eikos), var(--jev)); border-radius:3px; }
+  #nextbox.deciding #nextbar i { animation:scan 1s linear infinite; width:35% !important; }
+  @keyframes scan { from { transform:translateX(-100%); } to { transform:translateX(290%); } }
+
+  /* scorecards */
+  .card { top:136px; width:440px; height:250px; padding:20px 24px; }
+  #ce { left:40px; } #cj { left:500px; }
+  .card .top { display:flex; justify-content:space-between; align-items:baseline; }
+  .card .nm { font-size:30px; font-weight:900; letter-spacing:-.03em; }
+  #ce .nm { color:var(--eikos); } #cj .nm { color:var(--jev); }
+  .card .kd { font-size:13.5px; color:var(--muted); }
+  .card .eq { font-size:46px; font-weight:800; letter-spacing:-.02em; margin-top:8px; }
+  .card .pl { font-size:19px; font-weight:700; margin-top:2px; }
+  .pos { color:var(--up); } .neg { color:var(--down); } .zero { color:var(--muted); }
+  .card .grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-top:16px; }
+  .card .g { padding:9px 10px; border-radius:12px; background:rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.05); }
+  .card .g .v { font-size:17px; font-weight:800; margin-top:4px; font-family:"JetBrains Mono", monospace; white-space:nowrap; }
+  .card .g .lab { font-size:10.5px; letter-spacing:.12em; }
+  .card.lead { box-shadow:0 30px 100px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.14); }
+
+  /* chart */
+  #chartp { left:40px; top:402px; width:900px; height:356px; padding:18px 22px; }
+  #chart { position:absolute; left:22px; top:48px; width:856px; height:290px; }
+  #chartp .legend { position:absolute; right:22px; top:16px; display:flex; gap:18px; font-size:14px; color:var(--muted); font-weight:700; }
+  .sw { display:inline-block; width:22px; height:4px; border-radius:2px; vertical-align:middle; margin-right:7px; }
+
+  /* feed */
+  #feedp { left:40px; top:774px; width:900px; height:226px; padding:16px 22px; overflow:hidden; }
+  #feed { margin-top:10px; }
+  .ev { display:grid; grid-template-columns:62px 70px 1fr; gap:10px; font-size:15.5px; line-height:1.3; padding:5px 0; border-top:1px solid rgba(255,255,255,.04); }
+  .ev .t { color:var(--dim); font-family:"JetBrains Mono", monospace; font-size:14px; }
+  .ev .w { font-weight:800; } .ev .w.eikos { color:var(--eikos); } .ev .w.jev { color:var(--jev); } .ev .w.sys { color:var(--muted); }
+  .ev .x { color:#c9ced8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ev.new { animation:flashin 1.2s ease-out; }
+  @keyframes flashin { from { background:rgba(255,255,255,.08); } to { background:transparent; } }
+
+  /* markets */
+  #mk { left:970px; top:136px; width:910px; height:864px; padding:14px 18px; }
+  #mkhead, .row { display:grid; grid-template-columns:200px 140px 1fr 1fr; gap:12px; align-items:center; }
+  #mkhead { height:34px; padding:0 8px; margin-top:18px; }
+  .row { height:56px !important; }
+  #mkhead .e { color:var(--eikos); } #mkhead .j { color:var(--jev); }
+  .row { height:57px; padding:0 8px; border-top:1px solid rgba(255,255,255,.05); }
+  .mname { font-size:19px; font-weight:800; letter-spacing:-.01em; display:flex; align-items:center; gap:8px; }
+  .cat { font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; padding:3px 6px; border-radius:6px; }
+  .cat.crypto { color:#ffcf7a; background:rgba(245,185,66,.12); } .cat.stock { color:#9fe3c1; background:rgba(40,192,122,.12); }
+  .cat.index { color:#b9ccff; background:rgba(122,162,255,.13); } .cat.commodity { color:#e6b8ff; background:rgba(190,120,255,.13); }
+  .mdesc { font-size:12.5px; color:var(--dim); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .px { font-family:"JetBrains Mono", monospace; font-size:18px; font-weight:700; transition:color .6s; }
+  .px.up { color:var(--up); transition:none; } .px.down { color:var(--down); transition:none; }
+  .chg { font-size:12.5px; font-family:"JetBrains Mono", monospace; margin-top:3px; }
+  .cell { display:flex; align-items:center; gap:10px; }
+  .chip { width:64px; text-align:center; font-size:12.5px; font-weight:900; letter-spacing:.12em; padding:6px 0; border-radius:8px; }
+  .chip.long { color:#06170f; background:var(--up); } .chip.short { color:#1c0606; background:var(--down); }
+  .chip.flat { color:#aab0bc; background:rgba(255,255,255,.07); }
+  .chip.changed { animation:ring 2.2s ease-out; }
+  @keyframes ring { 0% { box-shadow:0 0 0 0 rgba(255,255,255,.9); } 100% { box-shadow:0 0 0 12px rgba(255,255,255,0); } }
+  .meta { font-size:12.5px; line-height:1.35; color:var(--muted); font-family:"JetBrains Mono", monospace; }
+  .meta b { color:#d9dde5; font-weight:700; }
+  .upnl { margin-left:auto; font-family:"JetBrains Mono", monospace; font-size:14px; font-weight:700; min-width:64px; text-align:right; }
+  #mkcap { position:absolute; right:26px; top:17px; font-size:12.5px; color:var(--dim); }
+
+  #foot { position:absolute; left:40px; right:40px; bottom:12px; font-size:13.5px; color:var(--dim); text-align:center; line-height:1.5; }
+  #err { position:absolute; left:50%; top:10px; transform:translateX(-50%); font-size:14px; color:#ffb3b3; opacity:0; transition:opacity .3s; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="glowA"></div><div id="glowB"></div>
+  <div id="head">
+    <div>
+      <div id="vs" class="tight"><span class="e">Eikos-27B</span><span class="v">VS</span><span class="j">Jev</span></div>
+      <div id="sub">Live paper trading on Hyperliquid: crypto, tokenized stocks, indices and commodities. Real prices, simulated money.</div>
+    </div>
+    <div id="right">
+      <div id="nextbox"><div id="nextlab"><span id="nextt">NEXT DECISION</span><b id="nextv">—</b></div><div id="nextbar"><i></i></div></div>
+      <span class="pill" id="usmk">US STOCKS —</span>
+      <span class="pill"><span class="dot"></span><span id="clock" class="mono">--:--:--</span>&nbsp;UTC</span>
+    </div>
+  </div>
+
+  <div class="panel card" id="ce"></div>
+  <div class="panel card" id="cj"></div>
+
+  <div class="panel" id="chartp"><span class="lab">Equity (simulated $)</span>
+    <div class="legend"><span><i class="sw" style="background:var(--eikos)"></i>Eikos-27B</span><span><i class="sw" style="background:var(--jev)"></i>Jev</span><span><i class="sw" style="background:#4a505d"></i>start $10,000</span></div>
+    <canvas id="chart" width="1712" height="580"></canvas></div>
+
+  <div class="panel" id="feedp"><span class="lab">Decisions</span><div id="feed"></div></div>
+
+  <div class="panel" id="mk">
+    <div id="mkcap">% = confidence in the position · ↑ = P(higher in 5 min)</div>
+    <div id="mkhead"><span class="lab">Market</span><span class="lab">Price · 24h</span><span class="lab e">Eikos-27B</span><span class="lab j">Jev</span></div>
+    <div id="rows"></div>
+  </div>
+
+  <div id="foot"></div>
+  <div id="err"></div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const NAME = { eikos: "Eikos-27B", jev: "Jev" };
+const KIND = { eikos: "open weights · one GPU", jev: "TypeSafe API · Vercel" };
+let ST = null, H = null, lastMid = {}, lastSide = {}, lastFeedT = 0, lastCycle = -1;
+
+function fit() {
+  const s = Math.min(innerWidth / 1920, innerHeight / 1080), st = $("#stage");
+  st.style.transform = `scale(${s})`; st.style.left = `${(innerWidth - 1920 * s) / 2}px`; st.style.top = `${(innerHeight - 1080 * s) / 2}px`;
+}
+addEventListener("resize", fit); fit();
+
+const usd = (x, sign) => { if (x == null) return "—"; const s = "$" + Math.abs(x).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return sign ? (x >= 0 ? "+" : "−") + s : (x < 0 ? "−" : "") + s; };
+const px = x => { if (x == null) return "—"; const d = Math.min(4, Math.max(0, 5 - Math.floor(Math.log10(x)))); return x.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }); };
+const cls = x => x > 0.005 ? "pos" : x < -0.005 ? "neg" : "zero";
+const hhmm = t => new Date(t * 1000).toISOString().slice(11, 16);
+
+function cards() {
+  const lead = ["eikos", "jev"].sort((a, b) => (ST.players[b].equity || 0) - (ST.players[a].equity || 0))[0];
+  for (const p of ["eikos", "jev"]) {
+    const P = ST.players[p], el = p === "eikos" ? $("#ce") : $("#cj");
+    const pl = P.equity == null ? null : P.equity - ST.start_equity;
+    const brier = P.brier == null ? "—" : P.brier.toFixed(3);
+    el.classList.toggle("lead", ST.cycle > 0 && p === lead && Math.abs(ST.players.eikos.equity - ST.players.jev.equity) > 0.01);
+    el.innerHTML = `
+      <div class="top"><span class="nm tight">${NAME[p]}</span><span class="kd">${KIND[p]}</span></div>
+      <div class="eq mono">${usd(P.equity)}</div>
+      <div class="pl ${cls(pl)}">${pl == null ? "" : `${usd(pl, true)} · ${(100 * pl / ST.start_equity >= 0 ? "+" : "")}${(100 * pl / ST.start_equity).toFixed(2)}%`}</div>
+      <div class="grid">
+        <div class="g"><div class="lab">Trades</div><div class="v">${P.trades}</div></div>
+        <div class="g"><div class="lab">Fees</div><div class="v">${usd(P.fees)}</div></div>
+        <div class="g"><div class="lab">Brier ↓</div><div class="v">${brier}</div></div>
+        <div class="g"><div class="lab">Latency</div><div class="v">${P.lat_last == null ? "—" : (P.lat_last / 1000).toFixed(2) + " s"}</div></div>
+      </div>`;
+  }
+}
+
+function rows() {
+  const box = $("#rows");
+  if (!box.children.length) {
+    box.innerHTML = ST.markets.map(m => `<div class="row" id="r_${m.label}">
+      <div><div class="mname">${m.label}<span class="cat ${m.cat}">${m.cat}</span></div><div class="mdesc">${m.desc}</div></div>
+      <div><div class="px" id="px_${m.label}">—</div><div class="chg" id="ch_${m.label}"></div></div>
+      <div class="cell" id="e_${m.label}"></div><div class="cell" id="j_${m.label}"></div></div>`).join("");
+  }
+  for (const m of ST.markets) {
+    const pe = $(`#px_${m.label}`);
+    if (m.mid != null) {
+      const prev = lastMid[m.label];
+      pe.textContent = px(m.mid);
+      if (prev != null && m.mid !== prev) { pe.classList.remove("up", "down"); void pe.offsetWidth; pe.classList.add(m.mid > prev ? "up" : "down"); setTimeout(() => pe.classList.remove("up", "down"), 700); }
+      lastMid[m.label] = m.mid;
+    }
+    const ch = $(`#ch_${m.label}`);
+    if (m.chg24 != null) { ch.textContent = `${m.chg24 >= 0 ? "+" : ""}${m.chg24.toFixed(2)}%`; ch.className = `chg ${cls(m.chg24)}`; }
+    for (const p of ["eikos", "jev"]) {
+      const x = m[p], el = $(`#${p[0]}_${m.label}`), side = x.side > 0 ? "long" : x.side < 0 ? "short" : "flat";
+      const pc = x.p_pos ? x.p_pos[side] : null;
+      const key = `${p}_${m.label}`, changed = lastSide[key] != null && lastSide[key] !== side;
+      lastSide[key] = side;
+      el.innerHTML = `<span class="chip ${side}${changed ? " changed" : ""}">${side.toUpperCase()}</span>
+        <span class="meta">${pc == null ? "" : `<b>${Math.round(pc * 100)}%</b>`}<br>${x.p_up == null ? "" : `↑ <b>${Math.round(x.p_up * 100)}%</b>`}</span>
+        <span class="upnl ${cls(x.upnl)}">${x.side ? usd(x.upnl, true) : ""}</span>`;
+    }
+  }
+}
+
+function feed() {
+  const ev = ST.feed.slice(-8).reverse();
+  $("#feed").innerHTML = ev.map(e => `<div class="ev${e.t > lastFeedT ? " new" : ""}"><span class="t">${hhmm(e.t)}</span><span class="w ${e.who}">${e.who === "sys" ? "arena" : NAME[e.who].replace("-27B", "")}</span><span class="x">${e.text.replace(/^(eikos|jev): /i, "")}</span></div>`).join("");
+  if (ST.feed.length) lastFeedT = ST.feed[ST.feed.length - 1].t;
+}
+
+function header() {
+  const now = ST.now;
+  $("#clock").textContent = new Date(now * 1000).toISOString().slice(11, 19);
+  $("#usmk").textContent = `US STOCKS ${ST.us_open ? "OPEN" : "CLOSED"}`;
+  const box = $("#nextbox");
+  box.classList.toggle("deciding", !!ST.running && !ST.finished);
+  if (ST.finished) { $("#nextt").textContent = "ARENA FINISHED"; $("#nextv").textContent = ""; $("#nextbar i").style.width = "100%"; return; }
+  if (ST.running) { $("#nextt").textContent = `DECIDING · #${ST.cycle + 1}/${ST.cycles_total}`; $("#nextv").textContent = ""; return; }
+  const left = Math.max(0, (ST.next || now) - now), step = ST.cycle_min * 60;
+  $("#nextt").textContent = `NEXT DECISION · #${ST.cycle + 1}/${ST.cycles_total}`;
+  $("#nextv").textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}`;
+  $("#nextbar i").style.width = `${100 * (1 - Math.min(1, left / step))}%`;
+}
+
+function chart() {
+  const c = $("#chart"), g = c.getContext("2d"), W = c.width, Hh = c.height;
+  g.clearRect(0, 0, W, Hh);
+  if (!H || !H.points.length) return;
+  const pts = H.points.slice();
+  if (ST && ST.players.eikos.equity != null) pts.push([ST.now, ST.players.eikos.equity, ST.players.jev.equity]);
+  const t0 = ST.start, t1 = Math.max(pts[pts.length - 1][0], t0 + 3600);
+  let lo = H.start_equity, hi = H.start_equity;
+  for (const [, a, b] of pts) { lo = Math.min(lo, a, b); hi = Math.max(hi, a, b); }
+  const pad = Math.max(8, (hi - lo) * 0.18); lo -= pad; hi += pad;
+  const L = 118, R = 150, T = 14, B = 44;
+  const X = t => L + (W - L - R) * (t - t0) / (t1 - t0), Y = v => T + (Hh - T - B) * (1 - (v - lo) / (hi - lo));
+  g.font = "22px JetBrains Mono"; g.fillStyle = "#5d6472"; g.textAlign = "right"; g.textBaseline = "middle";
+  for (let i = 0; i <= 4; i++) {
+    const v = lo + (hi - lo) * i / 4, y = Y(v);
+    g.strokeStyle = "rgba(255,255,255,.05)"; g.lineWidth = 2; g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke();
+    g.fillText("$" + Math.round(v).toLocaleString("en-US"), L - 14, y);
+  }
+  g.textAlign = "center"; g.textBaseline = "top";
+  const span = t1 - t0, stepH = span > 36 * 3600 ? 12 : span > 12 * 3600 ? 6 : span > 4 * 3600 ? 2 : 1;
+  for (let t = Math.ceil(t0 / (stepH * 3600)) * stepH * 3600; t <= t1; t += stepH * 3600) g.fillText(hhmm(t), X(t), Hh - B + 12);
+  g.setLineDash([10, 10]); g.strokeStyle = "#4a505d"; g.lineWidth = 2; g.beginPath(); g.moveTo(L, Y(H.start_equity)); g.lineTo(W - R, Y(H.start_equity)); g.stroke(); g.setLineDash([]);
+  for (const [k, col] of [[1, "#f5b942"], [2, "#7aa2ff"]]) {
+    g.strokeStyle = col; g.lineWidth = 5; g.lineJoin = "round"; g.beginPath();
+    pts.forEach((p, i) => { const x = X(p[0]), y = Y(p[k]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+    const lp = pts[pts.length - 1]; g.fillStyle = col; g.beginPath(); g.arc(X(lp[0]), Y(lp[k]), 8, 0, 7); g.fill();
+  }
+  // end labels, nudged apart
+  const le = pts[pts.length - 1];
+  let ye = Y(le[1]), yj = Y(le[2]); if (Math.abs(ye - yj) < 30) { const m = (ye + yj) / 2; ye = m + (le[1] >= le[2] ? -16 : 16); yj = m + (le[1] >= le[2] ? 16 : -16); }
+  g.font = "bold 24px JetBrains Mono"; g.textAlign = "left"; g.textBaseline = "middle";
+  g.fillStyle = "#f5b942"; g.fillText("$" + Math.round(le[1]).toLocaleString("en-US"), X(le[0]) + 16, ye);
+  g.fillStyle = "#7aa2ff"; g.fillText("$" + Math.round(le[2]).toLocaleString("en-US"), X(le[0]) + 16, yj);
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    ST = await r.json();
+    $("#err").style.opacity = 0;
+    header(); cards(); rows(); feed();
+    if (ST.cycle !== lastCycle) { lastCycle = ST.cycle; await hist(); } else chart();
+  } catch (e) { $("#err").textContent = "reconnecting…"; $("#err").style.opacity = 1; }
+}
+async function hist() { try { H = await (await fetch("/api/history", { cache: "no-store" })).json(); chart(); } catch (e) {} }
+
+$("#foot").innerHTML = "Paper money, real prices (Hyperliquid public market data; no orders are placed). Every 5 minutes both models get the same data and the same questions: for each market long, flat or short ($2,000 per position), and \"higher in 5 minutes?\"" +
+  "<br>Fills at the best bid/ask plus Hyperliquid's taker fee; hourly funding at Hyperliquid's rate. Brier: forecast error, lower is better (always saying 50% scores 0.250). Not financial advice.";
+(async () => { await document.fonts.ready; await tick(); setInterval(tick, 1000); setInterval(hist, 30000); })();
+</script>
+</body>
+</html>

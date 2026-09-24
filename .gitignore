@@ -1,0 +1,20 @@
+# secrets: never commit
+*.key
+*.pem
+.env
+.env.*
+keys.json
+*deny*.txt
+
+# run data (the official logs are published on the Hugging Face dataset)
+runs/
+logs/
+*.jsonl
+*.jsonl.gz
+arena_state.json
+
+# local
+.vercel/
+__pycache__/
+*.pyc
+.DS_Store

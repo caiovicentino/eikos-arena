@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eikos Arena · Eikos-27B vs Jev, live paper trading on Hyperliquid</title>
+<meta name="description" content="Two AI decision models trade 14 Hyperliquid perpetuals for 72 hours with $10,000 of paper money each. Same data and the same questions every five minutes. Real prices, no real orders.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Eikos Arena · Eikos-27B vs Jev">
+<meta property="og:description" content="Two AI decision models, $10,000 of paper money each, 14 Hyperliquid perpetuals, 72 hours. Same data and the same questions every five minutes.">
+<meta property="og:image" content="https://eikos-arena.vercel.app/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://eikos-arena.vercel.app/og.png">
+<meta name="theme-color" content="#0b1519">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="nav">
+  <div class="nav-l">
+    <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="7" height="14" rx="1.5"/><rect x="14" y="9" width="7" height="10" rx="1.5"/></svg>
+    <span class="brand">Eikos Arena</span>
+    <span class="tag">Paper trading</span>
+  </div>
+  <nav class="nav-m">
+    <a href="#bottom">Positions</a>
+    <a href="#bottom" data-go="trades">Trades</a>
+    <a href="#how">How it works</a>
+    <a href="https://huggingface.co/datasets/caiovicentino1/eikos-arena/blob/main/RULES.md" rel="noopener">Rules</a>
+    <a href="https://github.com/caiovicentino/eikos-arena" rel="noopener">Code</a>
+  </nav>
+  <div class="nav-r">
+    <span class="live" id="live"><i></i><span id="live-text">Connecting</span></span>
+    <span class="kv hide-s">Round <b id="nav-round">—</b></span>
+    <span class="kv">Next <b id="nav-next">—</b></span>
+  </div>
+</header>
+
+<div class="strip" id="strip" aria-label="Markets"></div>
+
+<p class="intro">Two AI models trade 14 Hyperliquid perpetuals with <b>$10,000 of paper money each</b>. Every 5 minutes both get the same market data and the same questions: long, flat or short, and "higher in 5 minutes?". Each position is $2,000 against the same $10,000, so with more than five open the account is leveraged, up to 2.8x. <a href="#how">How it works</a></p>
+
+<main class="layout">
+  <section class="panel chartp">
+    <div class="ph">
+      <div class="seg" id="modes">
+        <button data-mode="equity" class="on">Equity</button>
+        <button data-mode="market">Market</button>
+        <select id="msel" aria-label="Market"></select>
+      </div>
+      <div class="seg tf" id="tf">
+        <button data-r="3600">1H</button>
+        <button data-r="21600">6H</button>
+        <button data-r="86400">1D</button>
+        <button data-r="0" class="on">All</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="chart" id="chart"></div>
+  </section>
+
+  <aside class="side">
+    <section class="panel acct eikos" id="acct-eikos"></section>
+    <section class="panel acct jev" id="acct-jev"></section>
+    <section class="panel roundp" id="roundp"></section>
+  </aside>
+
+  <section class="panel bottom" id="bottom">
+    <div class="tabs" id="btabs" role="tablist">
+      <button data-t="pos-eikos" class="on">Positions · Eikos-27B <span class="n" id="n-eikos"></span></button>
+      <button data-t="pos-jev">Positions · Jev <span class="n" id="n-jev"></span></button>
+      <button data-t="compare">Side by side</button>
+      <button data-t="trades">Trade history <span class="n" id="n-trades"></span></button>
+      <button data-t="decisions">Decisions</button>
+    </div>
+    <div class="tablewrap" id="btable"></div>
+  </section>
+
+  <section class="panel how" id="how">
+    <h2>How it works</h2>
+    <div class="how-grid">
+      <p><b>The match.</b> Eikos-27B, an open-weights model, against Jev, TypeSafe's decision API. $10,000 of paper money each, 14 Hyperliquid perpetuals (crypto, tokenized stocks, indices, commodities), 72 hours.</p>
+      <p><b>Every 5 minutes.</b> Both get the same snapshot: prices, 5-minute and hourly candles, funding, open interest and their own positions. They answer 28 questions: long, flat or short on each market ($2,000 per position), and "higher in 5 minutes?" with a probability.</p>
+      <p><b>Execution.</b> Fills at Hyperliquid's real best bid and ask, with its real fees and hourly funding. Both models fill at the same prices, so answering faster never helps. All positions share the account's margin (cross margin): with all 14 open that is $28,000 of exposure, 2.8x the account, well within Hyperliquid's limits. Nothing is sent to the exchange.</p>
+      <p><b>Scoring.</b> Profit and loss, which over three days is mostly luck, and forecast error on the "higher in 5 minutes?" answers (Brier score): lower is better, always saying 50% scores 0.250. It shows whether a model's probabilities mean anything.</p>
+    </div>
+    <p class="caveat">Eikos was built to apply stated rules to a case, not to predict prices, so this is a stress test, not a trading product. The rules were fixed and hashed before the first decision; the full logs are published when the run ends. Not financial advice.</p>
+    <p class="links">
+      <a href="https://huggingface.co/datasets/caiovicentino1/eikos-arena/blob/main/RULES.md" rel="noopener">Rules</a>
+      <a href="https://huggingface.co/datasets/caiovicentino1/eikos-arena" rel="noopener">Live data</a>
+      <a href="https://huggingface.co/caiovicentino1/Eikos-27B" rel="noopener">Eikos-27B on Hugging Face</a>
+      <a href="https://github.com/caiovicentino/eikos-arena" rel="noopener">Arena code</a>
+      <a href="https://github.com/caiovicentino/eikos" rel="noopener">Model code</a>
+      <span class="hash" id="rules-hash"></span>
+    </p>
+  </section>
+</main>
+
+<footer class="foot">
+  Paper trading only, no real orders · Market data: Hyperliquid public API · Jev via the Vercel AI Gateway · Charts: TradingView Lightweight Charts™ · An experiment by <a href="https://x.com/0xCVYH" rel="noopener">Caio Vicentino</a> · Not financial advice
+</footer>
+<script src="/lightweight-charts.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

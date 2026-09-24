@@ -1,0 +1,2 @@
+# Only publish_live.py needs a package; the engine (arena.py, arena_core.py, hl.py) uses the standard library.
+huggingface_hub>=0.20
