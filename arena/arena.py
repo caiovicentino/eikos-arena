@@ -6,7 +6,9 @@ bid/ask, so latency never changes a fill. The previous cycle's "higher in 5 minu
 (Brier) against the new mid. Mids are polled every 3 s for mark-to-market. Serves the dashboard and /api/state.
 Paper money only: no account, no orders; market data comes from Hyperliquid's public info API.
 
-usage: python arena.py --run-dir <dir> [--hours 72] [--port 8340] [--eikos-url ...] [--dry-cycles N]"""
+usage: python arena.py --run-dir <dir> [--hours 72] [--port 8340] [--eikos-url ...] [--dry-cycles N]
+Keys come from the environment: TYPESAFE_API_KEY (Jev through TypeSafe's API) or AI_GATEWAY_API_KEY (Jev through the
+Vercel AI Gateway), and EIKOS_API_KEY if your Eikos endpoint needs one."""
 import argparse
 import datetime as dt
 import gzip
@@ -26,19 +28,46 @@ import hl
 
 HERE = Path(__file__).resolve().parent
 PLAYERS = ("eikos", "jev")
+TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone"
+GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/evaluate"
+
+
+def jev_endpoint(key_file=None, url=None, model=None):
+    """Jev's URL, model id and key. With TYPESAFE_API_KEY set: TypeSafe's own API. Otherwise: the Vercel AI Gateway
+    with AI_GATEWAY_API_KEY. A key file replaces the environment key; JEV_URL / JEV_MODEL (or the flags) replace the
+    defaults."""
+    direct = bool(os.environ.get("TYPESAFE_API_KEY"))
+    key = os.environ.get("TYPESAFE_API_KEY" if direct else "AI_GATEWAY_API_KEY", "")
+    if key_file:
+        key = Path(key_file).expanduser().read_text()
+    url = url or os.environ.get("JEV_URL") or (TYPESAFE_URL if direct else GATEWAY_URL)
+    model = model or os.environ.get("JEV_MODEL") or ("jev-latest" if "typesafe.ai" in url else "typesafe-ai/jev")
+    if not key.strip():
+        raise SystemExit("Jev needs a key: set TYPESAFE_API_KEY (TypeSafe's API) or AI_GATEWAY_API_KEY "
+                         "(Vercel AI Gateway), or pass --jev-key-file")
+    return url, model, key.strip()
+
+
+def jev_body(body, url):
+    """TypeSafe's own API names a yes/no question "noul"; the Vercel AI Gateway (and Eikos) name it "boolean"."""
+    if "typesafe.ai" not in url:
+        return body
+    qs = {k: (q | {"type": "noul"} if q.get("type") == "boolean" else q) for k, q in body["questions"].items()}
+    return body | {"questions": qs}
 
 
 class Upstream:
     """Keep-alive connection per player; retries transient errors (the gateway sometimes answers 503)."""
 
-    def __init__(self, url, headers=None, extra=None):
+    def __init__(self, url, headers=None, extra=None, prep=None):
         u = urllib.parse.urlparse(url)
+        self.prep = prep or (lambda body: body)
         self.tls, self.host, self.port, self.path = u.scheme == "https", u.hostname, u.port, u.path
         self.headers = {"Content-Type": "application/json"} | (headers or {})
         self.extra, self.conn, self.lock = extra or {}, None, threading.Lock()
 
     def call(self, body, tries=5):
-        data = json.dumps(body | self.extra).encode()
+        data = json.dumps(self.prep(body) | self.extra).encode()
         last = None
         with self.lock:
             for i in range(tries):
@@ -74,9 +103,11 @@ class Arena:
         self.state_path = self.dir / "arena_state.json"
         self.log_path = self.dir / "cycles.jsonl"
         self.req_path = self.dir / "requests.jsonl.gz"
-        key = Path(a.jev_key_file).read_text().strip()
-        self.up = {"eikos": Upstream(a.eikos_url),
-                   "jev": Upstream(a.jev_url, {"Authorization": f"Bearer {key}"}, {"model": "typesafe-ai/jev"})}
+        jev_url, jev_model, key = jev_endpoint(a.jev_key_file, a.jev_url, a.jev_model)
+        ekey = os.environ.get("EIKOS_API_KEY")
+        self.up = {"eikos": Upstream(a.eikos_url, {"Authorization": f"Bearer {ekey}"} if ekey else None),
+                   "jev": Upstream(jev_url, {"Authorization": f"Bearer {key}"}, {"model": jev_model},
+                                   lambda body: jev_body(body, jev_url))}
         self.lock = threading.Lock()
         self.mids, self.mids_t = {}, 0.0
         try:  # 24h reference prices for the dashboard before the first cycle
@@ -98,7 +129,7 @@ class Arena:
                       "pending": None, "last": {}, "lat": {p: [] for p in PLAYERS}, "missed": {p: 0 for p in PLAYERS},
                       "funding_hours": [], "config": {"hours": a.hours, "cycle_min": C.CYCLE_MIN, "notional": C.NOTIONAL,
                                                       "start_equity": C.START_EQUITY, "markets": hl.MARKETS,
-                                                      "eikos_url": a.eikos_url, "jev_model": "typesafe-ai/jev"}}
+                                                      "eikos_url": a.eikos_url, "jev_model": jev_model}}
             self.pf = {p: C.Portfolio() for p in PLAYERS}
             self.feed(f"arena started: {len(hl.MARKETS)} markets, {C.CYCLE_MIN}-minute decisions, {a.hours} h", "sys")
 
@@ -334,9 +365,13 @@ def main():
     ap.add_argument("--run-dir", required=True)
     ap.add_argument("--hours", type=float, default=72)
     ap.add_argument("--port", type=int, default=8340)
-    ap.add_argument("--eikos-url", default="http://127.0.0.1:8232/v1/evaluate")
-    ap.add_argument("--jev-url", default="https://ai-gateway.vercel.sh/v1/evaluate")
-    ap.add_argument("--jev-key-file", default="jev.key")
+    ap.add_argument("--eikos-url", default=os.environ.get("EIKOS_URL", "http://127.0.0.1:8000/v1/evaluate"),
+                    help="any TypeSafe-compatible /v1/evaluate endpoint (EIKOS_URL); EIKOS_API_KEY if it needs a key")
+    ap.add_argument("--jev-url", default=None,
+                    help="default: TypeSafe's API with TYPESAFE_API_KEY, else the Vercel AI Gateway")
+    ap.add_argument("--jev-model", default=None,
+                    help="default: jev-latest on TypeSafe's API, typesafe-ai/jev on the gateway")
+    ap.add_argument("--jev-key-file", default=None, help="file holding the Jev key, instead of the environment")
     ap.add_argument("--dry-cycles", type=int, default=0, help="run N cycles back to back first (testing only)")
     ap.add_argument("--html", default=str(HERE / "arena.html"), help="dashboard page (display only)")
     a = ap.parse_args()

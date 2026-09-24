@@ -127,6 +127,7 @@ def main():
     if not a.dry_run:
         from huggingface_hub import HfApi
         api = HfApi()
+        api.create_repo(a.repo, repo_type="dataset", exist_ok=True)  # public, so the page can read it
     last_cycle, last_push = None, 0.0
     while True:
         try:
